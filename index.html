@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Pogoda</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    background-attachment: fixed;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 12px 48px;
+  }
+
+  /* ─── TOP BAR ─── */
+  .topbar {
+    width: 100%;
+    max-width: 1280px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 8px;
+  }
+
+  .app-title {
+    font-size: clamp(1.1rem, 4vw, 1.6rem);
+    font-weight: 300;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #a8d8ea;
+    white-space: nowrap;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .app-credit {
+    font-size: 0.6rem;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    text-transform: none;
+    color: rgba(255,255,255,0.3);
+    white-space: nowrap;
+  }
+
+  .lang-switcher { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .lang-btn {
+    padding: 7px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(168,216,234,0.4);
+    background: transparent;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+    -webkit-appearance: none;
+    touch-action: manipulation;
+  }
+  .lang-btn.active, .lang-btn:hover {
+    background: #a8d8ea; color: #1a1a2e;
+    border-color: #a8d8ea; font-weight: 700;
+  }
+
+  /* ─── MAIN LAYOUT: wide = side by side ─── */
+  .main-layout {
+    width: 100%;
+    max-width: 1280px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* Left column: capitals + search */
+  .left-col {
+    width: 100%;
+    transition: width 0.45s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* Right column: detail panel */
+  .right-col {
+    width: 100%;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.45s cubic-bezier(.4,0,.2,1), opacity 0.35s ease;
+  }
+  .right-col.visible {
+    max-height: 1000px;
+    opacity: 1;
+  }
+
+  /* ─── WIDE SCREEN LAYOUT ─── */
+  @media (min-width: 820px) {
+    .main-layout {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .left-col {
+      flex: 1 1 auto;
+      min-width: 0;
+      transition: flex 0.45s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* when detail is shown, left shrinks slightly */
+    .main-layout.has-detail .left-col {
+      flex: 0 0 420px;
+    }
+
+    .right-col {
+      flex: 0 0 0px;
+      max-height: none;
+      opacity: 0;
+      overflow: hidden;
+      transition: flex 0.45s cubic-bezier(.4,0,.2,1), opacity 0.35s ease 0.1s;
+    }
+    .right-col.visible {
+      flex: 1 1 auto;
+      opacity: 1;
+      max-height: none;
+    }
+  }
+
+  /* ─── CAPITALS ─── */
+  .capitals-section { width: 100%; margin-bottom: 18px; }
+
+  .section-label {
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 10px;
+  }
+
+  .capitals-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    transition: grid-template-columns 0.45s ease;
+  }
+
+  /* on wide when detail shown: 2 cols */
+  @media (min-width: 820px) {
+    .main-layout.has-detail .capitals-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .capitals-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  }
+
+  .capital-card {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 12px 11px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .capital-card:hover { transform: translateY(-2px); }
+  .capital-card:active { background: rgba(168,216,234,0.2); transform: none; }
+  .capital-card.active {
+    background: rgba(168,216,234,0.15);
+    border-color: rgba(168,216,234,0.6);
+  }
+
+  .capital-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+  .capital-flag { font-size: clamp(1.1rem, 3.5vw, 1.4rem); line-height: 1; }
+  .capital-time {
+    font-size: clamp(0.58rem, 1.8vw, 0.72rem);
+    color: rgba(255,255,255,0.5);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
+  }
+  .capital-city {
+    font-size: clamp(0.8rem, 2.2vw, 0.95rem);
+    font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .capital-country {
+    font-size: clamp(0.58rem, 1.6vw, 0.72rem);
+    color: rgba(255,255,255,0.4);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .capital-temp {
+    font-size: clamp(1.05rem, 3vw, 1.3rem);
+    font-weight: 200; color: #a8d8ea; margin-top: 3px;
+  }
+  .capital-cond {
+    font-size: clamp(0.58rem, 1.6vw, 0.72rem);
+    color: rgba(255,255,255,0.45);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ─── SEARCH ─── */
+  .search-box {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 0;
+    width: 100%;
+  }
+  .search-box input {
+    flex: 1; min-width: 0;
+    padding: 13px 18px;
+    border-radius: 30px;
+    border: 1px solid rgba(168,216,234,0.4);
+    background: rgba(255,255,255,0.07);
+    color: #fff; font-size: 1rem; outline: none;
+    transition: border 0.2s;
+    -webkit-appearance: none;
+  }
+  .search-box input::placeholder { color: rgba(255,255,255,0.4); }
+  .search-box input:focus { border-color: #a8d8ea; }
+  .search-box button {
+    padding: 13px 20px; border-radius: 30px; border: none;
+    background: #a8d8ea; color: #1a1a2e;
+    font-size: 0.95rem; font-weight: 700; cursor: pointer;
+    transition: background 0.2s; white-space: nowrap; flex-shrink: 0;
+    touch-action: manipulation; -webkit-appearance: none;
+  }
+  .search-box button:active { background: #79c2d8; }
+
+  /* ─── DETAIL CARD ─── */
+  .detail-card {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 22px;
+    padding: clamp(20px, 4vw, 36px) clamp(16px, 4vw, 36px);
+    width: 100%;
+    text-align: center;
+  }
+
+  /* on mobile add top margin */
+  @media (max-width: 819px) {
+    .right-col.visible { margin-top: 20px; }
+  }
+
+  .city-name {
+    font-size: clamp(1.2rem, 4vw, 1.6rem);
+    font-weight: 600; margin-bottom: 4px; word-break: break-word;
+  }
+  .date { font-size: clamp(0.72rem, 2vw, 0.85rem); color: rgba(255,255,255,0.5); margin-bottom: 20px; }
+  .temp {
+    font-size: clamp(3.5rem, 12vw, 5rem);
+    font-weight: 200; line-height: 1; color: #a8d8ea; margin-bottom: 6px;
+  }
+  .condition { font-size: clamp(0.85rem, 2.5vw, 1rem); color: rgba(255,255,255,0.6); margin-bottom: 24px; }
+
+  .sun-row {
+    display: flex; justify-content: space-around;
+    background: rgba(255,255,255,0.05);
+    border-radius: 14px; padding: 16px 10px; margin-bottom: 20px;
+  }
+  .sun-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .sun-icon { font-size: clamp(1.3rem, 4vw, 1.6rem); }
+  .sun-label {
+    font-size: clamp(0.58rem, 1.8vw, 0.7rem);
+    text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.45);
+  }
+  .sun-time { font-size: clamp(0.95rem, 3vw, 1.1rem); font-weight: 600; }
+
+  .fact-box {
+    background: rgba(168,216,234,0.1);
+    border-left: 3px solid #a8d8ea;
+    border-radius: 0 12px 12px 0;
+    padding: 13px 14px; text-align: left;
+  }
+  .fact-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; color: #a8d8ea; margin-bottom: 6px; }
+  .fact-text { font-size: clamp(0.82rem, 2vw, 0.9rem); line-height: 1.55; color: rgba(255,255,255,0.8); }
+
+  .error { color: #ff8a80; font-size: 0.9rem; text-align: center; padding: 20px; }
+  .loading { color: rgba(255,255,255,0.5); font-size: 0.9rem; text-align: center; padding: 20px; }
+
+  .footer {
+    width: 100%;
+    max-width: 1280px;
+    margin-top: 32px;
+    text-align: center;
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.5px;
+    line-height: 1.8;
+  }
+  .footer a { color: rgba(168,216,234,0.45); text-decoration: none; }
+  .footer a:hover { color: #a8d8ea; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="app-title">🌤 <span data-t="title">Pogoda</span><span class="app-credit" data-t="credit">stworzone z pomocą Claude Sonnet 4.6</span></div>
+  <div class="lang-switcher">
+    <button class="lang-btn active" onclick="setLang('pl')">🇵🇱 PL</button>
+    <button class="lang-btn" onclick="setLang('en')">🇬🇧 EN</button>
+    <button class="lang-btn" onclick="setLang('es')">🇪🇸 ES</button>
+  </div>
+</div>
+
+<div class="main-layout" id="mainLayout">
+
+  <!-- LEFT: capitals + search -->
+  <div class="left-col">
+    <div class="capitals-section">
+      <div class="section-label" data-t="capitalsLabel">Stolice świata</div>
+      <div class="capitals-grid" id="capitalsGrid"></div>
+    </div>
+    <div class="search-box">
+      <input type="text" id="cityInput" placeholder="Wpisz miasto..."
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+      <button onclick="searchCity()" data-t="searchBtn">Szukaj</button>
+    </div>
+  </div>
+
+  <!-- RIGHT: detail panel -->
+  <div class="right-col" id="rightCol">
+    <div id="result"></div>
+  </div>
+
+</div>
+
+<div class="footer">
+  Dane pogodowe: <a href="https://open-meteo.com" target="_blank">Open-Meteo</a> — bezpłatne API pogodowe na licencji <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a><br>
+  Geokodowanie: <a href="https://open-meteo.com/en/docs/geocoding-api" target="_blank">Open-Meteo Geocoding API</a>
+</div>
+
+<script>
+const T = {
+  pl: {
+    title:"Pogoda", credit:"stworzone z pomocą Claude Sonnet 4.6", capitalsLabel:"Stolice świata", searchPlaceholder:"Wpisz miasto...", searchBtn:"Szukaj",
+    loading:"Ładowanie...", loadingWeather:"Pobieram dane pogodowe...", notFound:"Nie znaleziono takiego miasta.",
+    sunrise:"Wschód słońca", sunset:"Zachód słońca", factLabel:"💡 Ciekawostka",
+    facts:[
+      "Błyskawica jest ok. 5 razy gorętsza od powierzchni Słońca — osiąga temp. ok. 30 000°C.",
+      "Śnieg nie jest biały — jest bezbarwny. Wygląda biało, bo odbija całe spektrum światła.",
+      "Wiatr sam w sobie nie ma dźwięku — słyszysz go dopiero, gdy uderza w przedmioty.",
+      "Każdy płatek śniegu ma 6 ramion, ale żaden nie jest identyczny z drugim.",
+      "Deszcz pachnie dzięki geosminie — substancji wydzielanej przez bakterie w glebie.",
+      "Mgła to po prostu chmura znajdująca się przy ziemi.",
+      "Najwyższa temperatura na Ziemi — 56,7°C — Dolina Śmierci, USA, 1913 rok.",
+      "Piorun uderza w Ziemię około 100 razy na sekundę.",
+      "Tęcza jest kołem — z ziemi widzimy tylko łuk, bo horyzont go przycina.",
+      "Grzmot to fala dźwiękowa z gwałtownego nagrzania powietrza przez błyskawicę."
+    ],
+    date: d => d.toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+    wmo:{0:"Bezchmurnie",1:"Głównie bezchmurnie",2:"Częściowe zachmurzenie",3:"Zachmurzenie",45:"Mgła",48:"Szron mgłowy",51:"Lekka mżawka",53:"Umiarkowana mżawka",55:"Gęsta mżawka",61:"Lekki deszcz",63:"Umiarkowany deszcz",65:"Silny deszcz",71:"Lekki śnieg",73:"Umiarkowany śnieg",75:"Intensywny śnieg",77:"Ziarnisty śnieg",80:"Przelotny deszcz",81:"Przelotne deszcze",82:"Gwałtowne deszcze",85:"Przelotny śnieg",86:"Silny przelotny śnieg",95:"Burza",96:"Burza z gradem",99:"Silna burza z gradem"}
+  },
+  en: {
+    title:"Weather", credit:"made with Claude Sonnet 4.6", capitalsLabel:"World Capitals", searchPlaceholder:"Enter city...", searchBtn:"Search",
+    loading:"Loading...", loadingWeather:"Fetching weather data...", notFound:"City not found. Try another name.",
+    sunrise:"Sunrise", sunset:"Sunset", factLabel:"💡 Fun Fact",
+    facts:[
+      "Lightning is ~5× hotter than the Sun's surface — reaching around 30,000°C.",
+      "Snow isn't white — it's translucent. It looks white because it reflects all light wavelengths.",
+      "Wind has no sound on its own — you only hear it when it hits objects.",
+      "Every snowflake has 6 arms, but no two are exactly alike.",
+      "Rain smells because of geosmin — a substance released by soil bacteria.",
+      "Fog is simply a cloud sitting at ground level.",
+      "The highest recorded temperature on Earth is 56.7°C — Death Valley, USA, 1913.",
+      "Lightning strikes Earth about 100 times every second.",
+      "A rainbow is a full circle — from the ground we only see an arc because the horizon cuts it off.",
+      "Thunder is a sound wave created by the rapid heating of air by a lightning bolt."
+    ],
+    date: d => d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+    wmo:{0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Icy fog",51:"Light drizzle",53:"Moderate drizzle",55:"Dense drizzle",61:"Light rain",63:"Moderate rain",65:"Heavy rain",71:"Light snow",73:"Moderate snow",75:"Heavy snow",77:"Snow grains",80:"Slight showers",81:"Moderate showers",82:"Violent showers",85:"Slight snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm with hail",99:"Heavy thunderstorm with hail"}
+  },
+  es: {
+    title:"El Tiempo", credit:"hecho con Claude Sonnet 4.6", capitalsLabel:"Capitales del mundo", searchPlaceholder:"Escribe una ciudad...", searchBtn:"Buscar",
+    loading:"Cargando...", loadingWeather:"Obteniendo datos...", notFound:"Ciudad no encontrada. Prueba otro nombre.",
+    sunrise:"Amanecer", sunset:"Atardecer", factLabel:"💡 Curiosidad",
+    facts:[
+      "Un rayo es ~5 veces más caliente que la superficie del Sol — alcanza unos 30 000°C.",
+      "La nieve no es blanca — es translúcida. Parece blanca porque refleja todo el espectro de luz.",
+      "El viento no tiene sonido propio — solo lo escuchas cuando golpea objetos.",
+      "Cada copo de nieve tiene 6 brazos, pero ninguno es idéntico a otro.",
+      "La lluvia huele gracias a la geosmina — liberada por bacterias del suelo.",
+      "La niebla es simplemente una nube a nivel del suelo.",
+      "La temperatura más alta registrada fue 56,7°C — Valle de la Muerte, EE.UU., 1913.",
+      "Un rayo golpea la Tierra unas 100 veces por segundo.",
+      "El arcoíris es un círculo — desde el suelo solo vemos un arco porque el horizonte lo corta.",
+      "El trueno es una onda sonora creada por el calentamiento brusco del aire."
+    ],
+    date: d => d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+    wmo:{0:"Cielo despejado",1:"Mayormente despejado",2:"Parcialmente nublado",3:"Nublado",45:"Niebla",48:"Niebla helada",51:"Llovizna ligera",53:"Llovizna moderada",55:"Llovizna densa",61:"Lluvia ligera",63:"Lluvia moderada",65:"Lluvia fuerte",71:"Nieve ligera",73:"Nieve moderada",75:"Nevada intensa",77:"Granizo de nieve",80:"Chubascos débiles",81:"Chubascos moderados",82:"Chubascos violentos",85:"Nevadas débiles",86:"Nevadas fuertes",95:"Tormenta",96:"Tormenta con granizo",99:"Tormenta fuerte con granizo"}
+  }
+};
+
+const CAPITALS = [
+  {city:"Warszawa",cityEn:"Warsaw",  cityEs:"Varsovia",country:"Polska",       countryEn:"Poland",        countryEs:"Polonia",   flag:"🇵🇱",lat:52.23,lon:21.01, tz:"Europe/Warsaw"},
+  {city:"Londyn",  cityEn:"London",  cityEs:"Londres", country:"Wielka Brytania",countryEn:"United Kingdom",countryEs:"Reino Unido",flag:"🇬🇧",lat:51.51,lon:-0.13,tz:"Europe/London"},
+  {city:"Paryż",   cityEn:"Paris",   cityEs:"París",   country:"Francja",      countryEn:"France",        countryEs:"Francia",   flag:"🇫🇷",lat:48.85,lon:2.35,  tz:"Europe/Paris"},
+  {city:"Berlin",  cityEn:"Berlin",  cityEs:"Berlín",  country:"Niemcy",       countryEn:"Germany",       countryEs:"Alemania",  flag:"🇩🇪",lat:52.52,lon:13.41, tz:"Europe/Berlin"},
+  {city:"Madryt",  cityEn:"Madrid",  cityEs:"Madrid",  country:"Hiszpania",    countryEn:"Spain",         countryEs:"España",    flag:"🇪🇸",lat:40.42,lon:-3.70, tz:"Europe/Madrid"},
+  {city:"Rzym",    cityEn:"Rome",    cityEs:"Roma",    country:"Włochy",       countryEn:"Italy",         countryEs:"Italia",    flag:"🇮🇹",lat:41.90,lon:12.50, tz:"Europe/Rome"},
+];
+
+let currentLang = 'pl';
+let capitalWeather = {};
+let activeCapitalIdx = null;
+
+function showDetail() {
+  document.getElementById('rightCol').classList.add('visible');
+  document.getElementById('mainLayout').classList.add('has-detail');
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.lang-btn[onclick="setLang('${lang}')"]`).classList.add('active');
+  document.getElementById('cityInput').placeholder = T[lang].searchPlaceholder;
+  document.querySelector('[data-t="searchBtn"]').textContent = T[lang].searchBtn;
+  document.querySelector('[data-t="capitalsLabel"]').textContent = T[lang].capitalsLabel;
+  document.querySelector('[data-t="title"]').textContent = T[lang].title;
+  document.querySelector('[data-t="credit"]').textContent = T[lang].credit;
+  renderCapitals();
+  if (activeCapitalIdx !== null) showCapitalDetail(activeCapitalIdx);
+}
+
+function getLocalTime(tz) {
+  try { return new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:tz}); }
+  catch(e) { return "--:--:--"; }
+}
+
+function updateClocks() {
+  CAPITALS.forEach((cap,i) => {
+    const el = document.getElementById(`clock-${i}`);
+    if (el) el.textContent = getLocalTime(cap.tz);
+  });
+}
+
+function renderCapitals() {
+  document.getElementById('capitalsGrid').innerHTML = CAPITALS.map((cap,i) => {
+    const w = capitalWeather[i];
+    const cityName    = currentLang==='pl'?cap.city   :currentLang==='en'?cap.cityEn   :cap.cityEs;
+    const countryName = currentLang==='pl'?cap.country:currentLang==='en'?cap.countryEn:cap.countryEs;
+    return `
+      <div class="capital-card ${activeCapitalIdx===i?'active':''}" onclick="showCapitalDetail(${i})">
+        <div class="capital-top">
+          <span class="capital-flag">${cap.flag}</span>
+          <span class="capital-time" id="clock-${i}">${getLocalTime(cap.tz)}</span>
+        </div>
+        <div class="capital-city">${cityName}</div>
+        <div class="capital-country">${countryName}</div>
+        <div class="capital-temp">${w?`${Math.round(w.temp)}°C`:'…'}</div>
+        <div class="capital-cond">${w?(T[currentLang].wmo[w.code]||'—'):'…'}</div>
+      </div>`;
+  }).join('');
+}
+
+async function fetchCapitalWeather(i) {
+  const cap = CAPITALS[i];
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${cap.lat}&longitude=${cap.lon}&current=temperature_2m,weathercode&timezone=${cap.tz}&forecast_days=1`);
+    const data = await res.json();
+    capitalWeather[i] = {temp:data.current.temperature_2m, code:data.current.weathercode};
+    renderCapitals();
+  } catch(e) {}
+}
+
+async function showCapitalDetail(i) {
+  activeCapitalIdx = i;
+  const cap = CAPITALS[i];
+  renderCapitals();
+  showDetail();
+  document.getElementById('result').innerHTML = `<p class="loading">${T[currentLang].loadingWeather}</p>`;
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${cap.lat}&longitude=${cap.lon}&current=temperature_2m,weathercode&daily=sunrise,sunset&timezone=${cap.tz}&forecast_days=1`);
+    const data = await res.json();
+    const cityName    = currentLang==='pl'?cap.city   :currentLang==='en'?cap.cityEn   :cap.cityEs;
+    const countryName = currentLang==='pl'?cap.country:currentLang==='en'?cap.countryEn:cap.countryEs;
+    renderDetail(cityName, countryName, Math.round(data.current.temperature_2m),
+      T[currentLang].wmo[data.current.weathercode]||'—',
+      formatISOTime(data.daily.sunrise?.[0]), formatISOTime(data.daily.sunset?.[0]));
+    // on mobile scroll to result
+    if (window.innerWidth < 820)
+      setTimeout(()=>document.getElementById('rightCol').scrollIntoView({behavior:'smooth',block:'nearest'}),150);
+  } catch(e) {
+    document.getElementById('result').innerHTML = `<p class="error">❌ Błąd pobierania danych.</p>`;
+  }
+}
+
+async function searchCity() {
+  const city = document.getElementById('cityInput').value.trim();
+  if (!city) return;
+  activeCapitalIdx = null;
+  renderCapitals();
+  document.activeElement?.blur();
+  showDetail();
+  document.getElementById('result').innerHTML = `<p class="loading">${T[currentLang].loading}</p>`;
+  try {
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=${currentLang}&format=json`);
+    const geoData = await geoRes.json();
+    if (!geoData.results?.length) throw new Error(T[currentLang].notFound);
+    const loc = geoData.results[0];
+    document.getElementById('result').innerHTML = `<p class="loading">${T[currentLang].loadingWeather}</p>`;
+    const tz = loc.timezone||'UTC';
+    const wRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current=temperature_2m,weathercode&daily=sunrise,sunset&timezone=${encodeURIComponent(tz)}&forecast_days=1`);
+    const wData = await wRes.json();
+    renderDetail(loc.name, loc.country, Math.round(wData.current.temperature_2m),
+      T[currentLang].wmo[wData.current.weathercode]||'—',
+      formatISOTime(wData.daily.sunrise?.[0]), formatISOTime(wData.daily.sunset?.[0]));
+    if (window.innerWidth < 820)
+      setTimeout(()=>document.getElementById('rightCol').scrollIntoView({behavior:'smooth',block:'nearest'}),150);
+  } catch(e) {
+    document.getElementById('result').innerHTML = `<p class="error">❌ ${e.message}</p>`;
+  }
+}
+
+function renderDetail(city, country, temp, cond, sunrise, sunset) {
+  const t = T[currentLang];
+  const fact = t.facts[Math.floor(Math.random()*t.facts.length)];
+  document.getElementById('result').innerHTML = `
+    <div class="detail-card">
+      <div class="city-name">${city}, ${country}</div>
+      <div class="date">${t.date(new Date())}</div>
+      <div class="temp">${temp}°C</div>
+      <div class="condition">${cond}</div>
+      <div class="sun-row">
+        <div class="sun-item">
+          <span class="sun-icon">🌅</span>
+          <span class="sun-label">${t.sunrise}</span>
+          <span class="sun-time">${sunrise}</span>
+        </div>
+        <div class="sun-item">
+          <span class="sun-icon">🌇</span>
+          <span class="sun-label">${t.sunset}</span>
+          <span class="sun-time">${sunset}</span>
+        </div>
+      </div>
+      <div class="fact-box">
+        <div class="fact-label">${t.factLabel}</div>
+        <div class="fact-text">${fact}</div>
+      </div>
+    </div>`;
+}
+
+function formatISOTime(s) { return s ? s.slice(11,16) : "--:--"; }
+
+document.getElementById('cityInput').addEventListener('keydown', e => { if(e.key==='Enter') searchCity(); });
+
+renderCapitals();
+CAPITALS.forEach((_,i) => fetchCapitalWeather(i));
+setInterval(updateClocks, 1000);
+</script>
+</body>
+</html>
